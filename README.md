@@ -105,8 +105,7 @@ OTLP_HEADERS=
 ### Running the CrewAI Agent
 
 ```bash
-python crew_agent.py
-``` "Explain why observability matters for AI agents"
+python crew_agent.py "Explain why observability matters for AI agents"
 ```
 
 This agent uses CrewAI to create a research agent that can answer questions with full observability tracking.
