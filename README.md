@@ -1,6 +1,6 @@
 # Observability for AI Agents
 
-This project demonstrates how to implement comprehensive observability for AI agents using OpenTelemetry and Arize Phoenix. It includes examples for both CrewAI and Google ADK (Gemini) agents with full tracing, metrics, and logging capabilities.
+This project demonstrates how to implement comprehensive observability for AI agents using OpenTelemetry and Arize Phoenix. It instruments both CrewAI and Google ADK agents with OpenTelemetry and ships telemetry to **Arize Phoenix** via OTLP. The same pattern works for any OTLP-compatible backend.
 
 ## Features
 
@@ -9,6 +9,40 @@ This project demonstrates how to implement comprehensive observability for AI ag
 - 📊 **Arize Phoenix Support**: Send telemetry data to Arize Phoenix for analysis
 - 🛠️ **Reusable Observability Module**: Shared observability configuration across different agents
 - 📝 **Comprehensive Logging**: Structured logging with OpenTelemetry context
+- 🏗️ **Framework-Agnostic**: OTLP-first approach works with any Python agent
+
+## Tools Evaluated
+
+Before selecting Arize Phoenix, the following observability tools were evaluated:
+
+- **CrewAI Observability (native):** Built-in span logging for CrewAI only; no cross-framework or OTLP support.
+- **Opik (Comet):** Hosted + OSS UI for LLM traces/evals; Python-first; OTLP not first-class.
+- **Langfuse:** OSS/hosted, strong trace UI and scoring; OTLP compatibility is limited/beta.
+- **AgentOps.ai:** Commercial, agent-centric analytics; closed-source and no OTLP.
+- **Arize Phoenix:** OSS, OpenInference/OTLP-first, works with any Python agent, ships with trace UI.
+- **OpenLIT:** OSS OTLP instrumentation helpers; relies on an external OTLP backend for UI/storage.
+
+### Why Phoenix?
+
+- **Open-source** with local or hosted deployments; no vendor lock-in.
+- **OTLP-first**: Accepts traces/logs/metrics via standard OTLP over HTTP/gRPC.
+- **Framework-agnostic**: Works for CrewAI, Google ADK, or any custom agent because we emit OTel directly.
+- **Rich UI** for spans, token usage, and latency; compatible with Prom/Grafana for metrics export.
+- **Quick start** via Docker or `phoenix serve` for local evidence capture.
+
+## Architecture
+
+```
+CrewAI agent ----\
+                   \--> OpenTelemetry SDK (traces, metrics, logs)
+Google ADK agent --/            |
+                                v
+                         OTLP exporter
+                                |
+                        Arize Phoenix (collector + UI)
+                                |
+                         UI: http://localhost:6006
+```
 
 ## Project Structure
 
@@ -18,7 +52,6 @@ This project demonstrates how to implement comprehensive observability for AI ag
 ├── google_adk_agent.py    # Google ADK (Gemini) agent example
 ├── observability.py       # Shared observability configuration module
 ├── requirements.txt       # Python dependencies
-├── OBSERVABILITY.md       # Detailed observability documentation
 └── README.md             # This file
 ```
 
@@ -73,6 +106,7 @@ OTLP_HEADERS=
 
 ```bash
 python crew_agent.py
+``` "Explain why observability matters for AI agents"
 ```
 
 This agent uses CrewAI to create a research agent that can answer questions with full observability tracking.
@@ -80,15 +114,35 @@ This agent uses CrewAI to create a research agent that can answer questions with
 ### Running the Google ADK Agent
 
 ```bash
-python google_adk_agent.py
+python google_adk_agent.py "Summarize observability best practices for agents"
 ```
 
 This agent uses Google's Gemini model to generate responses with OpenTelemetry instrumentation.
 
+### Expected Telemetry
+
+After running the agents, open Phoenix UI at http://localhost:6006 and click the **default** project card, then open **Spans** to view traces. You should see:
+
+- **Traces:** Spans `crew.run` and `google_adk.run` with events `*_start` and `*_complete`
+- **Metrics:** Counters `agent_runs_total`, `agent_tokens_total`; histogram `agent_latency_ms`
+- **Logs:** Structured events `agent_run_complete` and agent results, all shipped over OTLP
+- **Service Names:** `crewai-agent` and `google-adk-agent` appear as separate services
+- **Span Attributes:** Prompt, model, token counts visible in span details
 ## Setting Up Arize Phoenix (Optional)
 
-To visualize your telemetry data:
 
+To visualize your telemetry data, you need to start Phoenix as a collector and UI:
+
+### Option 1: Using Docker (Recommended)
+
+```bash
+docker run --rm -it -p 6006:6006 -p 4317:4317 -p 4318:4318 arizephoenix/phoenix:latest
+```
+
+This exposes:
+- UI at `http://localhost:6006`
+- OTLP/HTTP at `http://localhost:6006/v1/{traces,metrics,logs}`
+- OTLP/gRPC at `http://localhost:4317`
 1. Install Arize Phoenix:
 ```bash
 pip install arize-phoenix
@@ -123,7 +177,20 @@ The `Observability` class in `observability.py` handles:
 - OTLP exporter configuration
 - Resource attributes
 
-### Agent Examples
+###Evidence Capture Checklist
+
+To validate the observability implementation:
+
+1. Keep Phoenix UI open at http://localhost:6006
+2. Run each agent once; confirm new traces appear with service names `crewai-agent` and `google-adk-agent`
+3. Open a trace; verify span attributes (prompt, model, token counts) and events
+4. Show metrics panel (latency histogram, run count); if using Grafana, add Tempo/Loki/Prom panels pointing to the same OTLP collector
+5. Optional: Record a screen video showing:
+   - Terminal with agent execution
+   - Phoenix UI showing incoming traces
+   - Drill into span details (events + attributes)
+
+##  Agent Examples
 
 Both agent examples demonstrate:
 - Proper initialization order (observability before agent frameworks)
